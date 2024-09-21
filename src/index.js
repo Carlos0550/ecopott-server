@@ -40,6 +40,10 @@ const uploadToCloudinary = async (file) => {
   }
 };
 
+app.get("/", (req,res)=> {
+  res.send("SERVIDOR WEB ONLINE")
+})
+
 const extractPublicIdFromUrl = (url) => { //Extrae el ID público de la URL de la imagen
   // console.log("**********************")
   // console.log("URLs recibidas para eliminar:", url)
