@@ -16,7 +16,7 @@ const PORT = process.env.PORT || 4000;
 // Cloudinary variables
 const preset_name = process.env.PRESET_NAMES_IMAGES;
 const cloud_name = process.env.CLOUD_NAME_IMAGES;
-const cloudinary_api_key = process.env.CLOUDINARY_API_KEY;
+const cloudinary_api_key = process.env.cloudinary_api_key;
 const cloudinary_api_secret = process.env.CLOUDINARY_API_SECRET;
 const cloudinary_url = `https://api.cloudinary.com/v1_1/${cloud_name}/image/upload`;
 //
