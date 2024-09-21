@@ -1,6 +1,6 @@
 const express = require("express");
 const cors = require("cors");
-const pool = require("./DB/clientSupabase.js");
+const pool = require("./DB/clientSupabase");
 const axios = require("axios");
 const FormData = require("form-data");
 const multer = require("multer");
