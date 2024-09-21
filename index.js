@@ -22,6 +22,10 @@ const cloudinary_url = `https://api.cloudinary.com/v1_1/${cloud_name}/image/uplo
 //
 const timestamp = Math.floor(Date.now() / 1000);
 
+app.get("/", (req,res)=> {
+  res.send("SERVER ON")
+})
+
 // Subir imagen a Cloudinary
 const uploadToCloudinary = async (file) => {
   const formData = new FormData();
