@@ -335,13 +335,14 @@ app.delete("/delete-category/:id", async(req,res)=> {
 
 app.post("/create-promotion",upload.none(), async(req,res)=> {
   const client = await pool.connect()
-  const { productsIDs, promoName, promoPrice, startDate, endDate } = req.body
+  const { productsIDs, promoName, promoPrice, startDate, endDate, enabled } = req.body
   const arrayIDs = JSON.parse(productsIDs)
+  console.log(enabled)
   let errorInserting = false
-  const query = `INSERT INTO promotions(id_product_promotion, name,price, start_date, end_date) VALUES($1, $2, $3, $4, $5)`
+  const query = `INSERT INTO promotions(id_product_promotion, name,price, start_date, end_date, enabled) VALUES($1, $2, $3, $4, $5)`
   try {
     for (let i = 0; i < arrayIDs.length; i++) {
-      const response = await client.query(query,[arrayIDs[i], promoName, promoPrice, startDate, endDate])
+      const response = await client.query(query,[arrayIDs[i], promoName, promoPrice, startDate, endDate, enabled])
       if (response.rowCount === 0) {
         errorInserting = true
         break
