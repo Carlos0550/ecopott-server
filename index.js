@@ -5,6 +5,7 @@ const axios = require("axios");
 const FormData = require("form-data");
 const multer = require("multer");
 const crypto = require("crypto");
+const cron = require("node-cron")
 const app = express();
 app.use(express.json());
 app.use(cors({ origin: "*" }));
@@ -331,6 +332,65 @@ app.delete("/delete-category/:id", async(req,res)=> {
     client.release()
   }
 })
+
+app.post("/create-promotion",upload.none(), async(req,res)=> {
+  const client = await pool.connect()
+  const { productsIDs, promoName, promoPrice, startDate, endDate } = req.body
+  const arrayIDs = JSON.parse(productsIDs)
+  let errorInserting = false
+  const query = `INSERT INTO promotions(id_product_promotion, name,price, start_date, end_date) VALUES($1, $2, $3, $4, $5)`
+  try {
+    for (let i = 0; i < arrayIDs.length; i++) {
+      const response = await client.query(query,[arrayIDs[i], promoName, promoPrice, startDate, endDate])
+      if (response.rowCount === 0) {
+        errorInserting = true
+        break
+      }
+    }
+    if (errorInserting) {
+      return res.status(400).json({message: "Error al guardar la promoción"})
+    }
+    return res.status(200).json({message: `Promoción guardada y lista para activarse el ${startDate}`})
+  } catch (error) {
+    console.log(error)
+    return res.status(500).json({message: "Error interno del servidor: No se pudo guardar la promoción"})
+  }finally{
+    client.release()
+  }
+});
+
+
+// cron.schedule("17 00 * * *", async () => {
+//   const client = await pool.connect();
+//   const query = "DELETE FROM promotions WHERE start_date = end_date";
+
+//   try {
+//     const response = await client.query(query);
+//     console.log(`Promociones eliminadas: ${response.rowCount}`);
+//   } catch (error) {
+//     console.error("Error al eliminar promociones:", error);
+//   } finally {
+//     client.release(); // Liberar el cliente
+//   }
+// });
+
+app.post("/automatic-delete-promotions", async (req, res) => {
+  const client = await pool.connect();
+  const query = "DELETE FROM promotions WHERE start_date = end_date";
+
+  try {
+    const response = await client.query(query);
+    console.log(`Promociones eliminadas: ${response.rowCount}`);
+    return res.status(200).json({ message: `${response.rowCount} promociones eliminadas.` });
+  } catch (error) {
+    console.error("Error al eliminar promociones:", error);
+    return res.status(500).json({ message: "Error interno del servidor." });
+  } finally {
+    client.release();
+  }
+});
+
+
 
 
 
