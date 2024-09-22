@@ -400,9 +400,9 @@ app.post("/automatic-delete-promotions", async (req, res) => {
 app.put("/automatic-enable-promotions", async (req, res) => {
   const client = await pool.connect();
   try {
-    const argentinaTime = dayjs().tz("America/Argentina/Buenos_Aires"); // Asegúrate de usar siempre la fecha actual de Argentina
-    const query = `UPDATE promotions SET enabled = true WHERE start_date = $1`; // Usar parámetro preparado
-    const values = [argentinaTime.format("YYYY-MM-DD")]; // Formatear la fecha correctamente
+    const argentinaTime = dayjs().tz("America/Argentina/Buenos_Aires");
+    const query = `UPDATE promotions SET enabled = true WHERE start_date = $1`; 
+    const values = [argentinaTime.format("YYYY-MM-DD")];
 
     const response = await client.query(query, values);
     return res.status(200).json({
