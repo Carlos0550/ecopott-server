@@ -6,11 +6,17 @@ const FormData = require("form-data");
 const multer = require("multer");
 const crypto = require("crypto");
 const cron = require("node-cron")
+const dayjs = require('dayjs');
+const utc = require("dayjs/plugin/utc");
+const timezone = require('dayjs/plugin/timezone');
+dayjs.extend(utc);
+dayjs.extend(timezone);
 const app = express();
 app.use(express.json());
 app.use(cors({ origin: "*" }));
 
 const upload = multer({ storage: multer.memoryStorage() });
+const argentinaTime = dayjs().tz('America/Argentina/Buenos_Aires');
 
 const PORT = process.env.PORT || 4000;
 
@@ -339,7 +345,7 @@ app.post("/create-promotion",upload.none(), async(req,res)=> {
   const arrayIDs = JSON.parse(productsIDs)
   console.log(enabled)
   let errorInserting = false
-  const query = `INSERT INTO promotions(id_product_promotion, name,price, start_date, end_date, enabled) VALUES($1, $2, $3, $4, $5)`
+  const query = `INSERT INTO promotions(id_product_promotion, name,price, start_date, end_date, enabled) VALUES($1, $2, $3, $4, $5, $6)`
   try {
     for (let i = 0; i < arrayIDs.length; i++) {
       const response = await client.query(query,[arrayIDs[i], promoName, promoPrice, startDate, endDate, enabled])
@@ -390,6 +396,16 @@ app.post("/automatic-delete-promotions", async (req, res) => {
     client.release();
   }
 });
+app.put("/automatic-enable-promotions", async(req,res)=> {
+  const client = await pool.connect()
+  const query = `UPDATE promotions SET enabled = true WHERE start_date = ${argentinaTime.format("YYYY-MM-DD")}`
+  try {
+    const response = await client.query(query)
+    return res.status(200).json({message: `${response.rowCount} filas fueron actualizadas`, query: response})
+  } catch (error) {
+    return res.status(500).json({message: "No se pudo activar las promociones", errores: error})
+  }
+})
 
 
 
