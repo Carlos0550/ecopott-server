@@ -342,25 +342,57 @@ app.delete("/delete-category/:id", async(req,res)=> {
 app.post("/create-promotion",upload.none(), async(req,res)=> {
   const client = await pool.connect()
   const { productsIDs, promoName, promoPrice, startDate, endDate, enabled } = req.body
-  const arrayIDs = JSON.parse(productsIDs)
   console.log(enabled)
-  let errorInserting = false
   const query = `INSERT INTO promotions(id_product_promotion, name,price, start_date, end_date, enabled) VALUES($1, $2, $3, $4, $5, $6)`
   try {
-    for (let i = 0; i < arrayIDs.length; i++) {
-      const response = await client.query(query,[arrayIDs[i], promoName, promoPrice, startDate, endDate, enabled])
-      if (response.rowCount === 0) {
-        errorInserting = true
-        break
-      }
-    }
-    if (errorInserting) {
+    const response = await client.query(query,[productsIDs, promoName, promoPrice, startDate, endDate, enabled])
+
+    if (response.rowCount === 0) {
       return res.status(400).json({message: "Error al guardar la promoción"})
     }
     return res.status(200).json({message: `Promoción guardada y lista para activarse el ${startDate}`})
   } catch (error) {
     console.log(error)
     return res.status(500).json({message: "Error interno del servidor: No se pudo guardar la promoción"})
+  }finally{
+    client.release()
+  }
+});
+
+app.post("/update-promotion",upload.none(), async(req,res)=> {
+  const client = await pool.connect()
+  const { productsIDs, promoName, promoPrice, startDate, endDate, enabled, promotionID } = req.body
+  console.log(enabled)
+  const query = `UPDATE promotions SET id_product_promotion = $1, name = $2, price = $3, start_date = $4, end_date = $5, enabled = $6 WHERE id_promotion = $7`
+  try {
+    const response = await client.query(query,[productsIDs, promoName, promoPrice, startDate, endDate, enabled, promotionID])
+
+    if (response.rowCount === 0) {
+      return res.status(400).json({message: "Error al actualizar la promoción"})
+    }
+    return res.status(200).json({message: "Promoción actualizada"})
+  } catch (error) {
+    console.log(error)
+    return res.status(500).json({message: "Error interno del servidor: No se pudo actualizar la promoción"})
+  }finally{
+    client.release()
+  }
+});
+
+app.delete("/delete-promotion/:promotionID",upload.none(), async(req,res)=> {
+  const client = await pool.connect()
+  const promotionID = req.params.promotionID
+  const query = `DELETE FROM promotions WHERE id_promotion = $1`
+  try {
+    const response = await client.query(query,[promotionID])
+
+    if (response.rowCount === 0) {
+      return res.status(400).json({message: "Error al eliminar la promoción"})
+    }
+    return res.status(200).json({message: "Promoción eliminada!"})
+  } catch (error) {
+    console.log(error)
+    return res.status(500).json({message: "Error interno del servidor: No se pudo eliminar la promoción"})
   }finally{
     client.release()
   }
