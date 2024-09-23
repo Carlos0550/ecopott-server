@@ -415,10 +415,12 @@ app.delete("/delete-promotion/:promotionID",upload.none(), async(req,res)=> {
 
 app.post("/automatic-delete-promotions", async (req, res) => {
   const client = await pool.connect();
-  const query = "DELETE FROM promotions WHERE start_date = end_date";
+  const query = "DELETE FROM promotions WHERE end_date = $1";
+  const argentinaTime = dayjs().tz("America/Argentina/Buenos_Aires");
+  const values = [argentinaTime.format("YYYY-MM-DD")];
 
   try {
-    const response = await client.query(query);
+    const response = await client.query(query, values);
     console.log(`Promociones eliminadas: ${response.rowCount}`);
     return res.status(200).json({ message: `${response.rowCount} promociones eliminadas.` });
   } catch (error) {
