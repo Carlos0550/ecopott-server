@@ -493,6 +493,17 @@ WHERE
   }
 });
 
+app.post("/clean-db", async(req,res)=> {
+  const client = await pool.connect()
+  try {
+    const query = "VACUM FULL"
+    const response = await client.query(query)
+    return res.status(200).json({message: "Limpieza de la BD exitosa!", response})
+  } catch (error) {
+    return res.status(500).json({message:"Hubo un error al hacer la limpieza de la BD"})
+  }
+});
+
 
 
 
