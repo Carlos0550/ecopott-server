@@ -9,6 +9,7 @@ const cron = require("node-cron")
 const dayjs = require('dayjs');
 const utc = require("dayjs/plugin/utc");
 const timezone = require('dayjs/plugin/timezone');
+const cloudinary = require("cloudinary").v2;
 dayjs.extend(utc);
 dayjs.extend(timezone);
 const app = express();
@@ -27,6 +28,13 @@ const cloudinary_api_key = process.env.cloudinary_api_key;
 const cloudinary_api_secret = process.env.CLOUDINARY_API_SECRET;
 const cloudinary_url = `https://api.cloudinary.com/v1_1/${cloud_name}/image/upload`;
 //
+
+cloudinary.config({
+  cloud_name: process.env.CLOUD_NAME_IMAGES,  // Asegúrate de que estas variables estén definidas
+  api_key: process.env.cloudinary_api_key,
+  api_secret: process.env.CLOUDINARY_API_SECRET
+});
+
 const timestamp = Math.floor(Date.now() / 1000);
 
 app.get("/", (req,res)=> {
@@ -453,6 +461,37 @@ app.put("/automatic-enable-promotions", async (req, res) => {
   }
 });
 
+
+app.get("/get-usages", async (req, res) => {
+  try {
+    const cloudinaryUsage = await cloudinary.api.usage();
+    const querySupabase = `SELECT 
+    pg_size_pretty(pg_database_size(current_database())) AS total_size,
+    pg_size_pretty(sum(pg_total_relation_size(table_schema || '.' || table_name))) AS tables_size
+FROM 
+    information_schema.tables
+WHERE 
+    table_schema = 'public';
+`
+
+    const result = await pool.query(querySupabase);
+
+    if (result.rows.length === 0) {
+      return res.status(404).json({ message: "No se encontró espacio disponible para este usuario" });
+    }
+
+    const availableSpace = result.rows;
+
+    return res.status(200).json({
+      cloudinaryUsage,
+      availableSpace
+    });
+
+  } catch (error) {
+    console.error(error);
+    return res.status(500).json({ message: "No se pudo obtener el uso de Cloudinary o el espacio en Supabase" });
+  }
+});
 
 
 
