@@ -648,6 +648,26 @@ app.delete("/delete_banner/:id", async (req, res) => {
   res.status(200).send()
 })
 
+app.put("/update_settings", async(req,res)=> {
+  const value = req.body.values
+  const client = await pool.connect()
+  const query = `UPDATE ajustes SET page_enabled = $1 WHERE id = 1` 
+
+  try {
+    const response = await client.query(query, [value])
+    if (response.rowCount > 0) {
+      return res.status(200).json({message: "Ajustes actualizados!"})
+    }else{
+      return res.status(400).json({message: "Error al actualizar los ajustes"})
+    }
+  } catch (error) {
+    console.log(error)
+    return res.status(500).json({message:"Hubo un error al hacer la actualización"})
+  }finally{
+    client.release()
+  }
+  // return res.status(200).json({message: "Ajustes actualizados!"})
+})
 
 app.listen(PORT, () => {
   console.log(`Servidor corriendo en el puerto ${PORT}`);
