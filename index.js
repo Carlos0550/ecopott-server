@@ -545,7 +545,6 @@ app.get("/get_products_view", async (req, res) => {
       client.query(query6)
     ]);
 
-
     res.json({
       products: rp1.rows,
       productImages: rp2.rows,
@@ -648,7 +647,6 @@ app.delete("/delete_banner/:id", async (req, res) => {
 
   res.status(200).send()
 })
-
 
 
 app.listen(PORT, () => {
