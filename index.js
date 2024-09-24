@@ -10,13 +10,15 @@ const dayjs = require('dayjs');
 const utc = require("dayjs/plugin/utc");
 const timezone = require('dayjs/plugin/timezone');
 const cloudinary = require("cloudinary").v2;
+const sharp = require("sharp");
+
 dayjs.extend(utc);
 dayjs.extend(timezone);
 const app = express();
 app.use(express.json());
 app.use(cors({ origin: "*" }));
 
-const upload = multer({ storage: multer.memoryStorage() });
+const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 50 * 1024 * 1024 } });
 const argentinaTime = dayjs().tz('America/Argentina/Buenos_Aires');
 
 const PORT = process.env.PORT || 4000;
@@ -43,18 +45,31 @@ app.get("/", (req,res)=> {
 
 // Subir imagen a Cloudinary
 const uploadToCloudinary = async (file) => {
-  const formData = new FormData();
-  formData.append("file", file.buffer, { filename: file.originalname });
-  formData.append("upload_preset", preset_name);
-
   try {
+    // Procesar la imagen con sharp para reducir el tamaño
+    const optimizedImageBuffer = await sharp(file.buffer)
+      .resize({
+        width: 1000, // Ajusta el tamaño según sea necesario
+        withoutEnlargement: true, // esto evita que se agranden las imágenes pequeñas
+      })
+      .toFormat('jpeg') // Cambia el formato a JPEG para mejor compresión
+      .jpeg({ quality: 80 }) // Reduce la calidad a 80 (ajustable)
+      .toBuffer();
+
+    const formData = new FormData();
+    formData.append("file", optimizedImageBuffer, { filename: file.originalname });
+    formData.append("upload_preset", preset_name);
+
     const response = await axios.post(cloudinary_url, formData, {
-      headers: formData.getHeaders(),
+      headers: {
+        "Content-Type": "multipart/form-data",
+      },
     });
+
     return response.data.secure_url;
   } catch (error) {
     console.error("Error subiendo imagen:", error);
-    throw new Error("Error al subir imagen");
+    throw new Error("Falló la subida a Cloudinary");
   }
 };
 
@@ -253,22 +268,26 @@ app.get("/fetch-all-data", async(req,res)=> {
   const query2 = "SELECT * FROM product_images"
   const query3 = "SELECT * FROM products"
   const query4 = "SELECT * FROM promotions"
-  const query5 = "SELECT * FROM vista_productos"
+  const query5 = "SELECT * FROM banners"
+  const query6 = "SELECT * FROM ajustes"
+
 
   try {
-    const [result1, result2, result3, result4, result5] = await Promise.all([
+    const [result1, result2, result3, result4, result5, result6] = await Promise.all([
       pool.query(query1),
       pool.query(query2),
       pool.query(query3),
       pool.query(query4),
       pool.query(query5),
+      pool.query(query6)
     ]);    
     return res.status(200).json({
       categories: result1.rows,
       product_images: result2.rows,
       products: result3.rows,
       promotions: result4.rows,
-      products_view: result5.rows,
+      bannersImgs: result5.rows,
+      settings: result6.rows
     });
   } catch (error) {
     console.log(error)
@@ -507,7 +526,128 @@ app.post("/clean-db", async(req,res)=> {
   }
 });
 
+app.get("/get_products_view", async (req, res) => {
+  const client = await pool.connect();
+  try {
+    const query1 = "SELECT * FROM products";
+    const query2 = "SELECT * FROM product_images";
+    const query3 = "SELECT * FROM categories";
+    const query4 = "SELECT * FROM promotions";
+    const query5 = "SELECT * FROM ajustes";
+    const query6 = "SELECT * FROM banners";
 
+    const [rp1, rp2, rp3, rp4,rp5,rp6] = await Promise.all([
+      client.query(query1),
+      client.query(query2),
+      client.query(query3),
+      client.query(query4),
+      client.query(query5),
+      client.query(query6)
+    ]);
+
+
+    res.json({
+      products: rp1.rows,
+      productImages: rp2.rows,
+      categories: rp3.rows,
+      promotions: rp4.rows,
+      settings: rp5.rows,
+      bannersImgs: rp6.rows
+    });
+  } catch (error) {
+    console.log(error);
+    return res.status(500).json({ message: "Hubo un error al hacer la limpieza de la BD" });
+  } finally {
+    client.release();
+  }
+});
+
+app.post("/update_setting", async(req,res)=> {
+  const client = await pool.connect()
+  const { condition_promotion, condition_product } = req.body
+  const query = `UPSERT INTO ajustes (condition_promotion, condition_product) VALUES ($1, $2) `
+
+  try {
+    const response = await client.query(query, [condition_promotion, condition_product])
+    return res.status(200).json({message: "Ajustes actualizados!", response})
+  } catch (error) {
+    console.log(error)
+    return res.status(500).json({message:"Hubo un error al hacer la actualización"})
+  }finally{
+    client.release()
+  }
+})
+
+app.post("/upload_banner", upload.array("bannerImages"), async (req, res) => {
+  const client = await pool.connect();
+  let imageUrls = [];
+  const productImages = req.files;
+  const {bannerName} = req.body
+  try {
+    await client.query('BEGIN');
+    
+    imageUrls = await Promise.all(
+      productImages.map(async (image) => await uploadToCloudinary(image))
+    );
+    
+    const serializedURLS = JSON.stringify(imageUrls);
+    const insertProductQuery = `INSERT INTO banners(image_urls, nombre_banner) VALUES($1, $2)`;
+    const productResponse = await client.query(insertProductQuery, [serializedURLS, bannerName]);
+  
+    if (productResponse.rowCount === 0){
+      await client.query('ROLLBACK');
+      throw new Error("No se pudieron insertar el/los banner/s");
+    } 
+    
+
+    await client.query('COMMIT');
+    res.status(200).json({ message: "Banner subido correctamente" });
+  } catch (error) {
+    await client.query('ROLLBACK');
+    console.error("Error al procesar el producto:", error);
+
+    // Eliminación de imágenes subidas en caso de error
+    await Promise.all(imageUrls.map(async (imageUrl) => {
+      const publicId = extractPublicIdFromUrl(imageUrl);
+      await deleteImageFromCloudinary(publicId);
+    }));
+
+    res.status(500).json({ success: false, message: "Error al subir el banner" });
+  } finally {
+    client.release();
+  }
+
+  // return res.status(200).send()
+});
+
+app.delete("/delete_banner/:id", async (req, res) => {
+  const client = await pool.connect();
+  const bannerId = req.params.id;
+  const imagenUrl = req.body.imageUrl
+  const publicId = extractPublicIdFromUrl(imagenUrl)
+  try {
+    const responseDelete = await deleteImageFromCloudinary(publicId)
+    console.log(responseDelete)
+    if (responseDelete.code === "ok" || responseDelete.code === 200) {
+      const deleteBannerQuery = "DELETE FROM banners WHERE id = $1";
+      const response = await client.query(deleteBannerQuery, [bannerId]);
+      if (response.rowCount > 0) {
+        res.status(200).json({ message: "Banner eliminado correctamente" });
+      }else{
+        res.status(400).json({ message: "Error al eliminar el banner" });
+      }
+    }else{
+      return res.status(400).json({message: "Error al eliminar las imagenes, por favor intente nuevamente"})
+    }
+  } catch (error) {
+    console.error("Error al eliminar el banner:", error);
+    res.status(500).json({ success: false, message: "Error al eliminar el banner" });
+  } finally {
+    client.release();
+  }
+
+  res.status(200).send()
+})
 
 
 
