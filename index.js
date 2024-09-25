@@ -18,7 +18,7 @@ const app = express();
 app.use(express.json());
 app.use(cors({ origin: "*" }));
 
-const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 50 * 1024 * 1024 } });
+const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 100 * 1024 * 1024 } });
 const argentinaTime = dayjs().tz('America/Argentina/Buenos_Aires');
 
 const PORT = process.env.PORT || 4000;
