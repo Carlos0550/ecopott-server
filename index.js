@@ -681,7 +681,7 @@ app.post("/upload_banner", upload.array("bannerImages"), async (req, res) => {
       const productResponse = await client.query(insertProductQuery, [serializedURLS, bannerName]);
       if (productResponse.rowCount === 0){
         await client.query('ROLLBACK');
-        return res.status(400).json({message: "No se pudieron insertar el/los banner/s"})
+        return res.status(400).json({message: "No se pudieron insertar el/los banner/s",productResponse})
       }else{
         await client.query('COMMIT');
         res.status(200).json({ message: "Banner subido correctamente" });
@@ -700,7 +700,7 @@ app.post("/upload_banner", upload.array("bannerImages"), async (req, res) => {
       await deleteImageFromCloudinary(publicId);
     }));
 
-    res.status(500).json({ success: false, message: "Error al subir el banner" });
+    res.status(500).json({ success: false, message: "Error al subir el banner", error });
   } finally {
     client.release();
   }
