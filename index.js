@@ -16,9 +16,10 @@ dayjs.extend(utc);
 dayjs.extend(timezone);
 const app = express();
 app.use(express.json());
-app.use(cors({
-  origin: "https://macetas-brian.vercel.app" 
-}));
+// app.use(cors({
+//   origin: "https://macetas-brian.vercel.app" 
+// }));
+app.use(cors())
 
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 300 * 1024 * 1024 } });
 const argentinaTime = dayjs().tz('America/Argentina/Buenos_Aires');
@@ -55,7 +56,6 @@ const uploadToCloudinary = async (file) => {
         withoutEnlargement: true, // esto evita que se agranden las imágenes pequeñas
       })
       .toFormat('jpeg') // Cambia el formato a JPEG para mejor compresión
-      .jpeg({ quality: 80 }) // Reduce la calidad a 80 (ajustable)
       .toBuffer();
 
     const formData = new FormData();
@@ -668,6 +668,7 @@ app.post("/upload_banner", upload.array("bannerImages"), async (req, res) => {
   const client = await pool.connect();
   let imageUrls = [];
   const productImages = req.files;
+  console.log(productImages)
   const {bannerName} = req.body
   try {
     await client.query('BEGIN');
@@ -705,7 +706,7 @@ app.post("/upload_banner", upload.array("bannerImages"), async (req, res) => {
     client.release();
   }
 
-  // return res.status(200).send()
+  return res.status(200).send()
 });
 
 app.delete("/delete_banner/:id", async (req, res) => {
