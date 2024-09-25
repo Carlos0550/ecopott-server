@@ -750,6 +750,25 @@ app.put("/update_settings", async(req,res)=> {
   // return res.status(200).json({message: "Ajustes actualizados!"})
 })
 
+app.put("/update_product_state",upload.none(), async(req,res)=> {
+  const client = await pool.connect()
+  const {productId, is_available} = req.body
+  const query = `UPDATE products SET is_available = $1 WHERE id_product = $2` 
+  try {
+    const response = await client.query(query, [is_available, productId])
+    if (response.rowCount > 0) {
+      return res.status(200).json({message: "Estado del producto actualizado!"})
+    }else{
+      return res.status(400).json({message: "Error intentando actualizar el estado del producto"})
+    }
+  } catch (error) {
+    console.log(error)
+    return res.status(500).json({message:"Hubo un error en el servidor intentando hacer la actualización del estado del producto"})
+  }finally{
+    client.release()
+  }
+})
+
 app.listen(PORT, () => {
   console.log(`Servidor corriendo en el puerto ${PORT}`);
 });
