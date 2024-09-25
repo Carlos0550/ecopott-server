@@ -166,9 +166,11 @@ app.post("/upload-product", upload.array("productImages"), async (req, res) => {
 app.post("/update-product/:id", upload.array("newImages"), async (req, res) => {
   const client = await pool.connect();
   const productId = req.params.id;
+  console.log("ID del producto: ",productId)
   const { productCategory, productDescription, productName, productPrice, imagesToDelete } = req.body;
-  const imagesToDeleteArray = JSON.parse(imagesToDelete);
-  const newImages = req.files;
+  const imagesToDeleteArray = JSON.parse(imagesToDelete || '[]'); 
+  console.log(imagesToDeleteArray)
+  const newImages = req.files || [];  
   let newImageUrls = [];
 
   try {
@@ -176,33 +178,36 @@ app.post("/update-product/:id", upload.array("newImages"), async (req, res) => {
 
     // Actualización del producto
     const updateProductQuery = `
-      UPDATE products SET id_product_category = $1, description = $2, name = $3, price = $4 
+      UPDATE products 
+      SET id_product_category = $1, description = $2, name = $3, price = $4 
       WHERE id_product = $5;
     `;
     const updateProductResult = await client.query(updateProductQuery, [
       productCategory, productDescription, productName, productPrice, productId
     ]);
-    
+
     if (updateProductResult.rowCount === 0) throw new Error("No se pudo actualizar el producto");
 
     // Eliminación de imágenes anteriores
     if (imagesToDeleteArray.length > 0) {
       const publicIds = imagesToDeleteArray.map((img) => extractPublicIdFromUrl(img.image_url));
-      console.log(publicIds)
+      console.log(publicIds);
       await Promise.all(publicIds.map(async (publicId) => await deleteImageFromCloudinary(publicId)));
+
+      const deleteOldImagesQuery = `DELETE FROM product_images WHERE id_image = ANY($1::int[])`;
+      const idsToDelete = imagesToDeleteArray.map(img => img.id_image);
+      
+      await client.query(deleteOldImagesQuery, [idsToDelete]);
+      
     }
 
-    // Subida de nuevas imágenes
     if (newImages.length > 0) {
       newImageUrls = await Promise.all(
         newImages.map(async (image) => await uploadToCloudinary(image))
       );
-      const deleteOldImagesQuery = `DELETE FROM product_images WHERE id_image = $1`
+
       const insertImageQuery = `INSERT INTO product_images (id_product_image, image_url) VALUES ($1, $2);`;
       await Promise.all(
-        imagesToDeleteArray.map(async(imageUrl) => {
-          await client.query(deleteOldImagesQuery,[imageUrl.id_image])
-        }),
         newImageUrls.map(async (imageUrl) => 
           await client.query(insertImageQuery, [productId, imageUrl])
         )
@@ -226,6 +231,7 @@ app.post("/update-product/:id", upload.array("newImages"), async (req, res) => {
     client.release();
   }
 });
+
 
 // Ruta para eliminar producto
 app.delete("/delete-product/:id", async (req, res) => {
