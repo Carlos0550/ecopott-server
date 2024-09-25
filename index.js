@@ -75,6 +75,7 @@ const uploadToCloudinary = async (file) => {
 
 // Extraer ID público de la URL de la imagen
 const extractPublicIdFromUrl = (url) => {
+  console.log(url)
   const parts = url.split('/');
   const fileName = parts.pop();
   return fileName.split('.')[0];
@@ -89,6 +90,7 @@ const generateSignature = (publicId, timestamp, apiSecret) => {
 
 // Eliminar imagen de Cloudinary
 const deleteImageFromCloudinary = async (publicId) => {
+  console.log("PublicId", publicId)
   const signature = generateSignature(publicId, timestamp, cloudinary_api_secret);
 
   try {
@@ -366,57 +368,134 @@ app.delete("/delete-category/:id", async(req,res)=> {
   }
 })
 
-app.post("/create-promotion",upload.none(), async(req,res)=> {
-  const client = await pool.connect()
-  const { productsIDs, promoName, promoPrice, startDate, endDate, enabled } = req.body
-  console.log(enabled)
-  const query = `INSERT INTO promotions(id_product_promotion, name,price, start_date, end_date, enabled) VALUES($1, $2, $3, $4, $5, $6)`
+app.post("/create-promotion", upload.single("promoImage"), async (req, res) => {
+  const client = await pool.connect();
+  const { productsIDs, promoName, promoPrice, startDate, endDate, enabled } = req.body;
+  const file = req.file;
+
+  const query = `INSERT INTO promotions(id_product_promotion, name, price, start_date, end_date, enabled, "imageUrl") VALUES($1, $2, $3, $4, $5, $6, $7)`;
+  let imageUrl = []
   try {
-    const response = await client.query(query,[productsIDs, promoName, promoPrice, startDate, endDate, enabled])
+    await client.query("BEGIN");
+
+    imageUrl = await uploadToCloudinary(file);
+
+    const response = await client.query(query, [productsIDs, promoName, promoPrice, startDate, endDate, enabled, imageUrl]);
 
     if (response.rowCount === 0) {
-      return res.status(400).json({message: "Error al guardar la promoción"})
+      await client.query("ROLLBACK");
+      const publicId = extractPublicIdFromUrl(imageUrl);
+      await deleteImageFromCloudinary(publicId);
+      return res.status(400).json({ message: "Error al guardar la promoción" });
     }
-    return res.status(200).json({message: `Promoción guardada y lista para activarse el ${startDate}`})
+
+    await client.query("COMMIT");
+    return res.status(200).json({ message: `Promoción guardada y lista para activarse el ${startDate}` });
   } catch (error) {
-    console.log(error)
-    return res.status(500).json({message: "Error interno del servidor: No se pudo guardar la promoción"})
-  }finally{
-    client.release()
+    console.log(error);
+
+    await client.query("ROLLBACK");
+    if (file) {
+      const publicId = extractPublicIdFromUrl(imageUrl);
+      await deleteImageFromCloudinary(publicId);
+    }
+    return res.status(500).json({ message: "Error interno del servidor: No se pudo guardar la promoción" });
+  } finally {
+    client.release();
   }
 });
 
-app.post("/update-promotion",upload.none(), async(req,res)=> {
-  const client = await pool.connect()
-  const { productsIDs, promoName, promoPrice, startDate, endDate, enabled, promotionID } = req.body
-  console.log(enabled)
-  const query = `UPDATE promotions SET id_product_promotion = $1, name = $2, price = $3, start_date = $4, end_date = $5, enabled = $6 WHERE id_promotion = $7`
-  try {
-    const response = await client.query(query,[productsIDs, promoName, promoPrice, startDate, endDate, enabled, promotionID])
 
-    if (response.rowCount === 0) {
-      return res.status(400).json({message: "Error al actualizar la promoción"})
+app.post("/update-promotion", upload.single("promoImage"), async (req, res) => {
+  const client = await pool.connect();
+  const { productsIDs, promoName, promoPrice, startDate, endDate, enabled, promotionID, existingImage, imageToDelete } = req.body;
+  const file = req.file;
+  let imageUrl = [];
+
+  const query = `UPDATE promotions SET id_product_promotion = $1, name = $2, price = $3, start_date = $4, end_date = $5, enabled = $6, "imageUrl" = $7 WHERE id_promotion = $8`;
+
+  try {
+    await client.query("BEGIN");
+
+    // Si hay una imagen existente, solo actualiza la promoción sin cambiar la imagen
+    if (existingImage) {
+      const response = await client.query(query, [productsIDs, promoName, promoPrice, startDate, endDate, enabled, existingImage, promotionID]);
+      if (response.rowCount === 0) {
+        await client.query("ROLLBACK");
+        return res.status(400).json({ message: "Error al actualizar la promoción" });
+      }
+      await client.query("COMMIT");
+      return res.status(200).json({ message: "Promoción actualizada" });
     }
-    return res.status(200).json({message: "Promoción actualizada"})
+
+    // Si no hay una imagen existente, elimina la imagen anterior (si corresponde)
+    const publicId = extractPublicIdFromUrl(imageToDelete);
+    const responseImages = await deleteImageFromCloudinary(publicId);
+    if (responseImages.code !== "ok" && responseImages.code !== 200) {
+      await client.query("ROLLBACK");
+      return res.status(400).json({ message: "Error al eliminar la imagen anterior" });
+    }
+
+    // Subir la nueva imagen
+    if (!file) {
+      await client.query("ROLLBACK");
+      return res.status(400).json({ message: "No se encontró ninguna imagen para subir" });
+    }
+
+    imageUrl = await uploadToCloudinary(file);
+    if (!imageUrl) {
+      await client.query("ROLLBACK");
+      return res.status(400).json({ message: "Error al subir la nueva imagen" });
+    }
+
+    // Actualizar la promoción con la nueva imagen
+    const response = await client.query(query, [productsIDs, promoName, promoPrice, startDate, endDate, enabled, imageUrl, promotionID]);
+    if (response.rowCount === 0) {
+      await client.query("ROLLBACK");
+      return res.status(400).json({ message: "Error al actualizar la promoción" });
+    }
+
+    await client.query("COMMIT");
+    return res.status(200).json({ message: "Promoción actualizada" });
+
   } catch (error) {
-    console.log(error)
-    return res.status(500).json({message: "Error interno del servidor: No se pudo actualizar la promoción"})
-  }finally{
-    client.release()
+    console.log(error);
+    // Intentar eliminar las imágenes subidas en caso de error
+    try {
+      await Promise.all(imageUrl.map(async (url) => {
+        const publicId = extractPublicIdFromUrl(url);
+        await deleteImageFromCloudinary(publicId);
+      }));
+    } catch (err) {
+      console.error("Error al eliminar imágenes subidas:", err);
+    }
+    await client.query("ROLLBACK");
+    return res.status(500).json({ message: "Error interno del servidor: No se pudo actualizar la promoción" });
+  } finally {
+    client.release();
   }
 });
+
 
 app.delete("/delete-promotion/:promotionID",upload.none(), async(req,res)=> {
   const client = await pool.connect()
   const promotionID = req.params.promotionID
+  const {imageUrl} = req.query
   const query = `DELETE FROM promotions WHERE id_promotion = $1`
   try {
-    const response = await client.query(query,[promotionID])
-
-    if (response.rowCount === 0) {
-      return res.status(400).json({message: "Error al eliminar la promoción"})
+    const publicId = extractPublicIdFromUrl(imageUrl);
+    const responseImages = await deleteImageFromCloudinary(publicId);
+    console.log("Respuesta al eliminar: ",responseImages)
+    if (responseImages.code === "ok" || responseImages.code === 200) {
+      const response = await client.query(query,[promotionID])
+      if (response.rowCount === 0) {
+        return res.status(400).json({message: "Error al eliminar la promoción"})
+      }
+      return res.status(200).json({message: "Promoción eliminada!"})
     }
-    return res.status(200).json({message: "Promoción eliminada!"})
+    return res.status(400).json({message: "Error al eliminar la promoción"})
+
+    
   } catch (error) {
     console.log(error)
     return res.status(500).json({message: "Error interno del servidor: No se pudo eliminar la promoción"})
@@ -588,19 +667,21 @@ app.post("/upload_banner", upload.array("bannerImages"), async (req, res) => {
     imageUrls = await Promise.all(
       productImages.map(async (image) => await uploadToCloudinary(image))
     );
-    
-    const serializedURLS = JSON.stringify(imageUrls);
-    const insertProductQuery = `INSERT INTO banners(image_urls, nombre_banner) VALUES($1, $2)`;
-    const productResponse = await client.query(insertProductQuery, [serializedURLS, bannerName]);
-  
-    if (productResponse.rowCount === 0){
-      await client.query('ROLLBACK');
-      throw new Error("No se pudieron insertar el/los banner/s");
-    } 
-    
-
-    await client.query('COMMIT');
-    res.status(200).json({ message: "Banner subido correctamente" });
+    if (Array.isArray(imageUrls) && imageUrls.length > 0) {
+      const serializedURLS = JSON.stringify(imageUrls);
+      const insertProductQuery = `INSERT INTO banners(image_urls, nombre_banner) VALUES($1, $2)`;
+      const productResponse = await client.query(insertProductQuery, [serializedURLS, bannerName]);
+      if (productResponse.rowCount === 0){
+        await client.query('ROLLBACK');
+        return res.status(400).json({message: "No se pudieron insertar el/los banner/s"})
+      }else{
+        await client.query('COMMIT');
+        res.status(200).json({ message: "Banner subido correctamente" });
+      }
+    }else{
+      await client.query("ROLLBACK")
+      return res.status(400).json({message: "No se pudieron insertar el/los banner/s"})
+    }
   } catch (error) {
     await client.query('ROLLBACK');
     console.error("Error al procesar el producto:", error);
