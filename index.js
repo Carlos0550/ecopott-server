@@ -16,7 +16,9 @@ dayjs.extend(utc);
 dayjs.extend(timezone);
 const app = express();
 app.use(express.json());
-app.use(cors({ origin: "*" }));
+app.use(cors({
+  origin: "https://macetas-brian.vercel.app" 
+}));
 
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 300 * 1024 * 1024 } });
 const argentinaTime = dayjs().tz('America/Argentina/Buenos_Aires');
