@@ -571,13 +571,7 @@ app.put("/automatic-enable-promotions", async (req, res) => {
 app.get("/get-usages", async (req, res) => {
   try {
     const cloudinaryUsage = await cloudinary.api.usage();
-    const querySupabase = `SELECT 
-    pg_size_pretty(pg_database_size(current_database())) AS total_size,
-    pg_size_pretty(sum(pg_total_relation_size(table_schema || '.' || table_name))) AS tables_size
-FROM 
-    information_schema.tables
-WHERE 
-    table_schema = 'public';
+    const querySupabase = `SELECT pg_size_pretty(pg_database_size(current_database())) AS total_size;
 `
 
     const result = await pool.query(querySupabase);
