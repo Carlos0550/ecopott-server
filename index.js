@@ -573,8 +573,8 @@ app.get("/get-usages", async (req, res) => {
     const cloudinaryUsage = await cloudinary.api.usage();
     const querySupabase = `SELECT pg_size_pretty(pg_database_size(current_database())) AS total_size;
 `
-    console.log(querySupabase);
     const result = await pool.query(querySupabase);
+    console.log(result);
 
     if (result.rows.length === 0) {
       return res.status(404).json({ message: "No se encontró espacio disponible para este usuario" });
